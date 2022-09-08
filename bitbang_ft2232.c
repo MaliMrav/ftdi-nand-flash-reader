@@ -62,6 +62,7 @@
 
 #define PAGE_SIZE 2112
 #define PAGE_SIZE_NOSPARE 2048
+#define NUM_BLOCKS 1024 /* 1Gbit = 1024, 2Gbit = 2048 (1024 * 2 Planes), 4Gbit = 4096 (2048 8 2 Planes) */
 
 const unsigned char CMD_READID = 0x90; /* read ID register */
 const unsigned char CMD_READ1[2] = { 0x00, 0x30 }; /* page read */
@@ -489,17 +490,17 @@ int latch_register(unsigned char reg[], unsigned int reg_length)
 
 void check_ID_register(unsigned char* ID_register)
 {
-    unsigned char ID_register_exp[5] = { 0xAD, 0xDC, 0x10, 0x95, 0x54 };
+    unsigned char ID_register_exp[4] = { 0x01, 0xF1, 0x00, 0x1D };
 
     /* output the retrieved ID register content */
-    printf("actual ID register:   0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n",
+    printf("actual ID register:  0x%02X 0x%02X 0x%02X 0x%02X\n",
         ID_register[0], ID_register[1], ID_register[2],
-        ID_register[3], ID_register[4] ); 
+        ID_register[3] ); 
 
     /* output the expected ID register content */
-    printf("expected ID register: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n",
+    printf("expected ID register: 0x%02X 0x%02X 0x%02X 0x%02X\n",
         ID_register_exp[0], ID_register_exp[1], ID_register_exp[2],
-        ID_register_exp[3], ID_register_exp[4] ); 
+        ID_register_exp[3] ); 
 
     if( strncmp( (char *)ID_register_exp, (char *)ID_register, 5 ) == 0 )
     {
@@ -518,7 +519,6 @@ void get_address_cycle_map_x8(uint32_t mem_address, unsigned char* addr_cylces)
     addr_cylces[1] = (unsigned char)( (mem_address & 0x00000F00) >> 8 );
     addr_cylces[2] = (unsigned char)( (mem_address & 0x000FF000) >> 12 );
     addr_cylces[3] = (unsigned char)( (mem_address & 0x0FF00000) >> 20 );
-    addr_cylces[4] = (unsigned char)( (mem_address & 0x30000000) >> 28 );
 }
 
 void dump_memory(void)
@@ -544,7 +544,7 @@ void dump_memory(void)
 
     // Start reading the data
     mem_address = 0x00000000; // start address
-    page_idx_max = 64 * 4096;
+    page_idx_max = 64 * NUM_BLOCKS;
     for( page_idx = 0; page_idx < page_idx_max; /* blocks per page * overall blocks */ page_idx++)
     {
 
@@ -552,15 +552,15 @@ void dump_memory(void)
       {
           printf("Reading data from memory address 0x%02X\n", mem_address);
           get_address_cycle_map_x8(mem_address, addr_cylces);
-          printf("  Address cycles are: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n",
+          printf("  Address cycles are: 0x%02X 0x%02X 0x%02X 0x%02X\n",
               addr_cylces[0], addr_cylces[1], /* column address */
-              addr_cylces[2], addr_cylces[3], addr_cylces[4] ); /* row address */
+              addr_cylces[2], addr_cylces[3] ); /* row address */
 
           printf("Latching first command byte to read a page...\n");
           latch_command(CMD_READ1[0]);
 
           printf("Latching address cycles...\n");
-          latch_address(addr_cylces, 5);
+          latch_address(addr_cylces, 4);
 
           printf("Latching second command byte to read a page...\n");
           latch_command(CMD_READ1[1]);
@@ -657,12 +657,12 @@ int erase_block(unsigned int nBlockId)
 
 	printf("Erasing block of data from memory address 0x%02X\n", mem_address);
 	get_address_cycle_map_x8(mem_address, addr_cylces);
-	printf("  Address cycles are (but: will take only cycles 3..5) : 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n",
+	printf("  Address cycles are (but: will take only cycles 3 & 4) : 0x%02X 0x%02X 0x%02X 0x%02X\n",
 		addr_cylces[0], addr_cylces[1], /* column address */
-		addr_cylces[2], addr_cylces[3], addr_cylces[4] ); /* row address */
+		addr_cylces[2], addr_cylces[3] ); /* row address */
 
 	printf("Latching page(row) address (3 bytes)...\n");
-	unsigned char address[] = { addr_cylces[2], addr_cylces[3], addr_cylces[4] };
+	unsigned char address[] = { addr_cylces[2], addr_cylces[3] };
 	latch_address(address, 3);
 
 	printf("Latching second command byte to erase a block...\n");
@@ -788,16 +788,16 @@ int program_page(unsigned int nPageId, unsigned char* data)
 
 	printf("Writing data to memory address 0x%02X\n", mem_address);
     get_address_cycle_map_x8(mem_address, addr_cylces);
-    printf("  Address cycles are: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n",
+    printf("  Address cycles are: 0x%02X 0x%02X 0x%02X 0x%02X\n",
         addr_cylces[0], addr_cylces[1], /* column address */
-        addr_cylces[2], addr_cylces[3], addr_cylces[4] ); /* row address */
+        addr_cylces[2], addr_cylces[3] ); /* row address */
 
 	printf("Latching first command byte to write a page (page size is %d)...\n",
 			PAGE_SIZE);
 	latch_command(CMD_PAGEPROGRAM[0]); /* Serial Data Input command */
 
 	printf("Latching address cycles...\n");
-    latch_address(addr_cylces, 5);
+    latch_address(addr_cylces, 4);
 
 	printf("Latching out the data of the page...\n");
 	latch_data_out(data, PAGE_SIZE);
